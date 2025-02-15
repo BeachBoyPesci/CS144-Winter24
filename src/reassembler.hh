@@ -6,6 +6,7 @@
 #include <iostream>
 #include <set>
 #include <string>
+#include <unordered_map>
 
 struct Interval
 {
@@ -26,7 +27,7 @@ class Reassembler
 {
 public:
   // Construct Reassembler to write into given ByteStream.
-  explicit Reassembler( ByteStream&& output ) : output_( std::move( output ) ) {}
+  explicit Reassembler( ByteStream&& output ) : output_( std::move( output ) ), stopped_( -1 ) {}
 
   /*
    * Insert a new substring to be reassembled into a ByteStream.
@@ -62,4 +63,8 @@ public:
 
 private:
   ByteStream output_; // the Reassembler writes to this ByteStream
+  uint64_t nread_ {};
+  uint64_t stopped_ {};
+  std::unordered_map<uint64_t, char> map {};
+  bool is_closed_ {};
 };
