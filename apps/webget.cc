@@ -7,18 +7,17 @@
 
 using namespace std;
 
-void get_URL( const string& host, const string& path ) {
-	CS144TCPSocket sock;
-	sock.connect(Address(host, "http"));
-	sock.write("GET " + path + " HTTP/1.1\r\n" + 
-				"Host: " + host + "\r\n" + 
-				"Connection: close" + "\r\n\r\n");
-	while (!sock.eof()) {
-		string msg;
-		sock.read(msg);
-		cout << msg;
-	}
-	sock.wait_until_closed();
+void get_URL( const string& host, const string& path )
+{
+  CS144TCPSocket sock;
+  sock.connect( Address( host, "http" ) );
+  sock.write( "GET " + path + " HTTP/1.1\r\n" + "Host: " + host + "\r\n" + "Connection: close" + "\r\n\r\n" );
+  while ( !sock.eof() ) {
+    string msg;
+    sock.read( msg );
+    cout << msg;
+  }
+  sock.wait_until_closed();
 }
 
 int main( int argc, char* argv[] )
