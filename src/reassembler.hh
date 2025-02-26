@@ -48,4 +48,6 @@ private:
   std::list<std::pair<uint64_t, std::string>> ordered_bytes_ {}; // 有序的缓冲区（list是有序容器）
   uint64_t bytes_pending_ {};                                    // 在ordered_bytes中缓冲的字节数
   uint64_t expecting_index_ {};                                  // 期待的下一个字节序号
+  uint64_t terminate_index_ {};                                  // is_last_string为T时，记录终止字节序号
+  bool is_last_substring_ {};                                    // 辅助判断是否关闭写端
 };
