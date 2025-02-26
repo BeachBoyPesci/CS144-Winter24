@@ -44,12 +44,8 @@ public:
   const Writer& writer() const { return output_.writer(); }
 
 private:
-  ByteStream output_;                                                   // the Reassembler writes to this ByteStream
-  std::list<std::tuple<uint64_t, std::string, bool>> ordered_bytes_ {}; // 有序的，无重复的缓冲区
-  uint64_t num_bytes_pending_ {};                                       // 当前存储的字节数
-  uint64_t expecting_index_ {};                                         // 期待的下一个字节序号
-
-  void push_bytes( uint64_t first_index, std::string data, bool is_last_string );
-  void cache_bytes( uint64_t first_index, std::string data, bool is_last_string );
-  void flush_buffer(); // 刷新缓冲区，把能push的数据全部push进去
+  ByteStream output_;                                            // the Reassembler writes to this ByteStream
+  std::list<std::pair<uint64_t, std::string>> ordered_bytes_ {}; // 有序的缓冲区（list是有序容器）
+  uint64_t bytes_pending_ {};                                    // 在ordered_bytes中缓冲的字节数
+  uint64_t expecting_index_ {};                                  // 期待的下一个字节序号
 };
