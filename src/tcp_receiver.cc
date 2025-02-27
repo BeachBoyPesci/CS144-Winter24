@@ -2,33 +2,35 @@
 
 using namespace std;
 
+// 需要注意，SYN，FIN，RST为F时，不占用空间，这虽然不符合struct的知识，但是这道题目似乎就是这个意思，否则不会设置一个sequence_length()函数。这个事情只能解释为这个课程做了一些简化。
 void TCPReceiver::receive( TCPSenderMessage message )
 {
-  const uint64_t checkpoint
-    = reassembler_.writer().bytes_pushed() + ISN.has_value(); // 这个值实际上是期待的下一个绝对字节序号
-  if ( message.RST )
-    reassembler_.reader().set_error(); // 设置错误标志，不过信息仍需发送
-  else if ( checkpoint > 0 && checkpoint <= UINT32_MAX && message.seqno == ISN )
-    return;                 // 拦截错误的报文段
-  if ( !ISN.has_value() ) { // 利用ISN的方法判断是否是第一次通信，来确定isn的值
+  if ( writer().has_error() )
+    return;
+  if ( message.RST ) {
+    reader().set_error();
+    return;
+  }
+  if ( !ISN_.has_value() ) {
     if ( !message.SYN )
       return;
-    ISN = message.seqno;
+    ISN_.emplace( message.seqno );
   }
-  const uint64_t abso_seqno = message.seqno.unwrap( *ISN, checkpoint );        // 加上了偏移量的绝对字节序号
-  const uint64_t stream_index = abso_seqno == 0 ? abso_seqno : abso_seqno - 1; // 去掉SYN标志
+  Wrap32 zero_point = ISN_.value();
+  uint64_t checkpoint = writer().bytes_pushed() + 1; // checkpoint就是正在期待的下一个字节序号
+  uint64_t abso_seqno = message.seqno.unwrap( zero_point, checkpoint );
+  uint64_t stream_index = abso_seqno + message.SYN - 1;
+  // 如果SYN为T，说明它是第一次传输，那么abso_seqno为0；如果SYN为F，说明是正常传输，要减去SYN标志位所占用的一个字节
   reassembler_.insert( stream_index, move( message.payload ), message.FIN );
 }
 
 TCPReceiverMessage TCPReceiver::send() const
 {
-  const uint64_t checkpoint = reassembler_.writer().bytes_pushed() + ISN.has_value();
-  const uint64_t capacity = reassembler_.writer().available_capacity();
-  const uint16_t wnd_size = capacity <= UINT16_MAX ? capacity : UINT16_MAX; // 窗口最大值为2^16
-  if ( !ISN.has_value() )
-    return { {}, wnd_size, reassembler_.writer().has_error() };
-  return {
-    Wrap32::wrap( checkpoint + reassembler_.writer().is_closed(), *ISN ), // 如果关闭了，还有个要占用1字节的FIN标志
-    wnd_size,
-    reassembler_.writer().has_error() };
+  uint16_t wd_size
+    = static_cast<uint16_t>( min( writer().available_capacity(), static_cast<uint64_t>( UINT16_MAX ) ) );
+  if ( ISN_.has_value() ) {
+    Wrap32 ackno = Wrap32::wrap( writer().bytes_pushed() + writer().is_closed(), ISN_.value() ) + 1;
+    return { ackno, wd_size, writer().has_error() };
+  }
+  return { nullopt, wd_size, writer().has_error() };
 }
