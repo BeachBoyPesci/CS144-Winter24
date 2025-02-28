@@ -2,7 +2,7 @@
 
 using namespace std;
 
-// 需要注意，SYN，FIN，RST为F时，不占用空间，这虽然不符合struct的知识，但是这道题目似乎就是这个意思，否则不会设置一个sequence_length()函数。这个事情只能解释为这个课程做了一些简化。
+// 需要注意，SYN，FIN，RST为F时，不占用空间，这虽然不符合struct的知识，但是这道题目似乎就是这个意思，否则不会设置一个sequence_length()函数。这个事情只能解释为这个课程做了一些简化，实际的生产代码里面，估计SYN标志位除了第一次以外，都不占字节
 void TCPReceiver::receive( TCPSenderMessage message )
 {
   if ( writer().has_error() )
