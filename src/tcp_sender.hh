@@ -9,12 +9,39 @@
 #include <queue>
 #include <utility>
 
+/*
+核心需求如下：
+1、记录接收端告知它的窗口大小（从 TCPReceiverMessages 中读取 window sizes）；
+2、从 ByteStream 中读取 payload，在窗口大小允许的情况下追加控制位 SYN
+和FIN（仅在最后一次发出消息时），并持续填充报文的 payload 部分直到窗口已满或没东西可以读，再将其发送出去；
+3、追踪哪些已发的报文是没收到回复的，这部分报文被称为“未完成的字节”；
+4、未完成的字节在足够长的时间后依然没得到确认，重传（也就是指 TCP 的自动重传部分）。
+*/
+
+// 计时器
+class RetransmissionTimer
+{
+public:
+  RetransmissionTimer( uint64_t initial_RTO_ms ) : RTO_( initial_RTO_ms ) {}
+  bool is_expired() const noexcept { return is_active_ && time_passed_ >= RTO_; }
+  bool is_active() const noexcept { return is_active_; }
+  RetransmissionTimer& active() noexcept;
+  RetransmissionTimer& timeout() noexcept; // RTO_*=2
+  RetransmissionTimer& reset() noexcept;
+  RetransmissionTimer& tick( uint64_t ms_since_last_tick ) noexcept;
+
+private:
+  uint64_t RTO_;            // 最大重传时间
+  uint64_t time_passed_ {}; // 已过多少时间
+  bool is_active_ {};       // 计时器是否开启
+};
+
 class TCPSender
 {
 public:
   /* Construct TCP sender with given default Retransmission Timeout and possible ISN */
   TCPSender( ByteStream&& input, Wrap32 isn, uint64_t initial_RTO_ms )
-    : input_( std::move( input ) ), isn_( isn ), initial_RTO_ms_( initial_RTO_ms )
+    : input_( std::move( input ) ), isn_( isn ), initial_RTO_ms_( initial_RTO_ms ), timer_( initial_RTO_ms )
   {}
 
   /* Generate an empty TCPSenderMessage */
@@ -48,4 +75,15 @@ private:
   ByteStream input_;
   Wrap32 isn_;
   uint64_t initial_RTO_ms_;
+
+  uint16_t wnd_size_ { 1 }; // 初始假定窗口为1
+  uint64_t next_seqno_ {};  // 待发送的下一个字节序号
+  uint64_t acked_seqno_ {}; // 已确认的字节序号
+  bool syn_flag_ {}, fin_flag_ {}, sent_syn_ {}, sent_fin_ {};
+
+  RetransmissionTimer timer_;
+  uint64_t retransmission_cnt_ {};
+
+  std::queue<TCPSenderMessage> outstanding_bytes_ {};
+  uint64_t num_bytes_in_flight_ {};
 };
