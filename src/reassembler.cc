@@ -30,7 +30,7 @@ void Reassembler::insert( uint64_t first_index, string data, bool is_last_substr
     data.resize( unacceptable_index_ - first_index );
   }
 
-  // 将data插入lists中
+  // 寻找需要合并的区间
   auto left = upper_bound( lists.begin(), lists.end(), first_index, []( uint64_t idx, auto&& e ) {
     return idx < e.first + e.second.size(); // 找到第一个满足idx<e.first的元素
   } );
