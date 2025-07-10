@@ -45,7 +45,7 @@ public:
 
 private:
   ByteStream output_; // the Reassembler writes to this ByteStream
-  std::list<pair<int, string>> lists {};
+  std::list<std::pair<uint64_t, std::string>> lists {};
   uint64_t bytes_pending_ {};
   uint64_t expecting_index_ {};
   uint64_t terminate_index_ {};
