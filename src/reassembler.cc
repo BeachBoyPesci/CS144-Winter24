@@ -40,15 +40,14 @@ void Reassembler::insert( uint64_t first_index, string data, bool is_last_substr
 
   // 如果有必要，合并左端点数据
   if ( left != lists.end() && first_index > left->first ) {
-    auto temp = left->second.substr( 0, first_index - left->first );
-    data = temp + data;
+    data.insert( 0, left->second, 0, first_index - left->first );
     first_index = left->first; // 更新first_index
   }
 
   // 如果有必要，合并右端点数据
   if ( right != lists.begin() && first_index + data.size() < prev( right )->first + prev( right )->second.size() ) {
     auto temp = prev( right )->second.substr( first_index + data.size() - prev( right )->first );
-    data += temp;
+    data.append( temp );
   }
 
   // 去掉中间的数据重复的节点
