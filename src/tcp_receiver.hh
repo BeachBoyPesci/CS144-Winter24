@@ -28,5 +28,5 @@ public:
 
 private:
   Reassembler reassembler_;
-  std::optional<Wrap32> ISN_ {}; // /*ISN就是zero_point
+  std::optional<Wrap32> isn_ {}; // /*ISN就是zero_point
 };

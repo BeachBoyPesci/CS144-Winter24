@@ -23,7 +23,7 @@ class TCPSender
 public:
   /* Construct TCP sender with given default Retransmission Timeout and possible ISN */
   TCPSender( ByteStream&& input, Wrap32 isn, uint64_t initial_RTO_ms )
-    : input_( std::move( input ) ), isn_( isn ), initial_RTO_ms_( initial_RTO_ms )
+    : input_( std::move( input ) ), isn_( isn ), initial_RTO_ms_( initial_RTO_ms ), curr_RTO_ms_( initial_RTO_ms )
   {}
 
   /* Generate an empty TCPSenderMessage */
@@ -51,10 +51,20 @@ public:
   const Reader& reader() const { return input_.reader(); }
 
 private:
-  TCPSenderMessage make_message( uint64_t seqno, std::string payload, bool SYN, bool FIN = false ) const;
+  // TCPSenderMessage make_message( uint64_t seqno, std::string payload, bool SYN, bool FIN = false ) const;
 
   // Variables initialized in constructor
   ByteStream input_;
   Wrap32 isn_;
-  uint64_t initial_RTO_ms_;
+  const uint64_t initial_RTO_ms_;
+
+  uint64_t next_seqno_ { 0 };                               // Next sequence number to send
+  uint64_t window_size_ { 0 };                              // Current window size as reported by the receiver
+  uint64_t curr_RTO_ms_;                                    // Current Retransmission Timeout in milliseconds
+  uint64_t last_tick_ms_ { 0 };                             // Last time tick() was called
+  uint64_t consecutive_retransmissions_ { 0 };              // Number of consecutive retransmissions
+  uint64_t sequence_numbers_in_flight_ { 0 };               // Number of sequence numbers currently in flight
+  std::queue<TCPSenderMessage> unacknowledged_messages_ {}; // Messages that have been sent but not acknowledged
+  bool first_ack { false };
+  // bool tick_on_ { false };
 };
