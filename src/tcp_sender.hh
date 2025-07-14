@@ -58,13 +58,16 @@ private:
   Wrap32 isn_;
   const uint64_t initial_RTO_ms_;
 
-  uint64_t next_seqno_ { 0 };                               // Next sequence number to send
-  uint64_t window_size_ { 0 };                              // Current window size as reported by the receiver
-  uint64_t curr_RTO_ms_;                                    // Current Retransmission Timeout in milliseconds
-  uint64_t last_tick_ms_ { 0 };                             // Last time tick() was called
-  uint64_t consecutive_retransmissions_ { 0 };              // Number of consecutive retransmissions
-  uint64_t sequence_numbers_in_flight_ { 0 };               // Number of sequence numbers currently in flight
+  uint64_t next_seqno_ { 0 };                  // Next sequence number to send
+  uint64_t impossible_ackno { 0 };             // The largest sequence number that is impossible to acknowledge
+  uint64_t window_size_ { 0 };                 // Current window size as reported by the receiver
+  uint64_t curr_RTO_ms_;                       // Current Retransmission Timeout in milliseconds
+  uint64_t last_tick_ms_ { 0 };                // Last time tick() was called
+  uint64_t consecutive_retransmissions_ { 0 }; // Number of consecutive retransmissions
+  uint64_t sequence_numbers_in_flight_ { 0 };  // Number of sequence numbers currently in flight
   std::queue<TCPSenderMessage> unacknowledged_messages_ {}; // Messages that have been sent but not acknowledged
   bool first_ack { false };
+  bool is_closed_ { false }; // Whether the sender has been closed (no more data will be sent)
+  bool FIN_sent { false };   // Whether a FIN has been sent
   // bool tick_on_ { false };
 };
