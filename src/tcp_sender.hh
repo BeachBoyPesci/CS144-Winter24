@@ -58,17 +58,16 @@ private:
   Wrap32 isn_;
   const uint64_t initial_RTO_ms_;
 
-  uint64_t next_seqno_ { 0 };                  // Next sequence number to send
-  uint64_t impossible_ackno { 0 };             // The largest sequence number that is impossible to acknowledge
-  uint64_t window_size_ { 0 };                 // Current window size as reported by the receiver
-  uint64_t curr_RTO_ms_;                       // Current Retransmission Timeout in milliseconds
-  uint64_t last_tick_ms_ { 0 };                // Last time tick() was called
-  uint64_t consecutive_retransmissions_ { 0 }; // Number of consecutive retransmissions
-  uint64_t sequence_numbers_in_flight_ { 0 };  // Number of sequence numbers currently in flight
-  std::queue<TCPSenderMessage> unacknowledged_messages_ {}; // Messages that have been sent but not acknowledged
-  bool first_ack { false };
-  bool is_closed_ { false };  // Whether the sender has been closed (no more data will be sent)
-  bool FIN_sent { false };    // Whether a FIN has been sent
-  bool established { false }; // Whether the connection has been established (SYN sent)
-  // bool tick_on_ { false };
+  uint64_t next_seqno_ { 0 };                               // 将要发送的下一个字节序号
+  uint64_t impossible_ackno { 0 };                          // 不可能的确认序号
+  uint64_t window_size_ { 0 };                              // 窗口大小
+  uint64_t curr_RTO_ms_;                                    // 当前超时重传时延
+  uint64_t last_tick_ms_ { 0 };                             // 自上次重置或第一次启动以来，过去的时间
+  uint64_t consecutive_retransmissions_ { 0 };              // 超时重传次数
+  uint64_t sequence_numbers_in_flight_ { 0 };               // 未确认的字节总数
+  std::queue<TCPSenderMessage> unacknowledged_messages_ {}; // 未确认的字节序列
+  bool first_ack { false };                                 // SYN已发送，用于保证全局只会push一次SYN信号
+  bool is_closed_ { false };                                // 连接将要关闭
+  bool FIN_sent { false };                                  // FIN信号已发送，用于保证只会push一次FIN信号
+  bool established { false };                               // 已建立连接
 };

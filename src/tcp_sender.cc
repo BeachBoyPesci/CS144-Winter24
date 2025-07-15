@@ -3,20 +3,20 @@
 #include <algorithm>
 
 using namespace std;
-// TODO: 把推入buffer的逻辑改一下，改成，SYN==false且payload==0且FIN==false的不推入，其余的都推入。最后再做
+
 void TCPSender::push( const TransmitFunction& transmit )
 {
-  uint64_t payload_size
+  uint64_t curr_size // curr_size实际上是包含了SYN和FIN信号的总大小
     = min( TCPConfig::MAX_PAYLOAD_SIZE,
            window_size_ > sequence_numbers_in_flight_ ? window_size_ - sequence_numbers_in_flight_ : 0 );
   if ( !window_size_ && !sequence_numbers_in_flight_
        && established ) // 只有连接建立之后，才准许在窗口为0的时候，假装它是1
-    payload_size = 1;
-  while ( 1 ) {
+    curr_size = 1;
+  while ( 1 ) { // 只要窗口还没排满，就一直发送
     TCPSenderMessage msg {};
     msg.seqno = Wrap32::wrap( next_seqno_, isn_ );
-    if ( window_size_ > sequence_numbers_in_flight_ ) {
-      payload_size
+    if ( window_size_ > sequence_numbers_in_flight_ ) { // 窗口还没排满的时候，重新计算curr_size
+      curr_size
         = min( TCPConfig::MAX_PAYLOAD_SIZE,
                window_size_ > sequence_numbers_in_flight_ ? window_size_ - sequence_numbers_in_flight_ : 0 );
     }
@@ -24,17 +24,17 @@ void TCPSender::push( const TransmitFunction& transmit )
       first_ack = true;
       msg.SYN = true;
       ++next_seqno_;
-      --payload_size;
+      --curr_size;
     }
 
-    while ( payload_size > 0 ) {
+    while ( curr_size > 0 ) {
       string data( reader().peek() );
       if ( data.empty() || data == "\377" ) {
         break; // 没有更多数据可读
       }
-      msg.payload += data.substr( 0, payload_size );
-      auto mn = min( payload_size, data.size() );
-      payload_size -= mn;
+      msg.payload += data.substr( 0, curr_size );
+      auto mn = min( curr_size, data.size() );
+      curr_size -= mn;
       writer().reader().pop( mn );
       next_seqno_ += mn;
     }
@@ -42,7 +42,7 @@ void TCPSender::push( const TransmitFunction& transmit )
       is_closed_ = true;
     }
     if ( ( ( ( window_size_ > sequence_numbers_in_flight_ + msg.sequence_length() ) && !reader().bytes_buffered() )
-           || payload_size )
+           || curr_size )
          && is_closed_ && !FIN_sent ) {
       FIN_sent = true;
       msg.FIN = true;
@@ -55,8 +55,7 @@ void TCPSender::push( const TransmitFunction& transmit )
       impossible_ackno = max( impossible_ackno, next_seqno_ + 1 );
       transmit( msg );
     }
-    // window_size_ -= msg.sequence_length();
-    if ( msg.sequence_length() == 0 )
+    if ( msg.sequence_length() == 0 ) // 空序列，退出循环
       break;
   }
 }
@@ -65,7 +64,7 @@ TCPSenderMessage TCPSender::make_empty_message() const
 {
   auto msg = TCPSenderMessage();
   msg.seqno = Wrap32::wrap( next_seqno_, isn_ );
-  msg.SYN = false; // 这个函数时用来确认连接是否在持续的，因此SYN为false
+  msg.SYN = false; // 这个方法是用来确认连接是否在持续的，因此SYN一直为false
   msg.FIN = false;
   msg.RST = reader().has_error();
   return msg;
