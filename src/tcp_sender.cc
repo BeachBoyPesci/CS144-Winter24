@@ -6,39 +6,58 @@ using namespace std;
 // TODO: 把推入buffer的逻辑改一下，改成，SYN==false且payload==0且FIN==false的不推入，其余的都推入。最后再做
 void TCPSender::push( const TransmitFunction& transmit )
 {
-  TCPSenderMessage msg {};
-  msg.seqno = Wrap32::wrap( next_seqno_, isn_ );
-  uint64_t payload_size = min( TCPConfig::MAX_PAYLOAD_SIZE, window_size_ - sequence_numbers_in_flight_ );
-  while ( payload_size > 0 ) {
-    string data( reader().peek() );
-    if ( data.empty() || data == "\377" ) {
-      break; // 没有更多数据可读
+  uint64_t payload_size
+    = min( TCPConfig::MAX_PAYLOAD_SIZE,
+           window_size_ > sequence_numbers_in_flight_ ? window_size_ - sequence_numbers_in_flight_ : 0 );
+  if ( !window_size_ && !sequence_numbers_in_flight_
+       && established ) // 只有连接建立之后，才准许在窗口为0的时候，假装它是1
+    payload_size = 1;
+  while ( 1 ) {
+    TCPSenderMessage msg {};
+    msg.seqno = Wrap32::wrap( next_seqno_, isn_ );
+    if ( window_size_ > sequence_numbers_in_flight_ ) {
+      payload_size
+        = min( TCPConfig::MAX_PAYLOAD_SIZE,
+               window_size_ > sequence_numbers_in_flight_ ? window_size_ - sequence_numbers_in_flight_ : 0 );
     }
-    msg.payload += data.substr( 0, payload_size );
-    auto mn = min( payload_size, data.size() );
-    payload_size -= mn;
-    writer().reader().pop( mn );
-    next_seqno_ += mn;
-  }
-  if ( writer().is_closed() ) {
-    is_closed_ = true;
-  }
-  if ( payload_size > 0 && is_closed_ && !FIN_sent ) {
-    FIN_sent = true;
-    msg.FIN = true;
-    ++next_seqno_;
-  }
-  msg.RST = reader().has_error();
-  if ( msg.sequence_length() > 0 || !first_ack ) {
-    if ( !first_ack ) {
+    if ( !first_ack ) { // 建立连接的时候，无论窗口大小是否大于0，都要发送一个SYN信号
       first_ack = true;
       msg.SYN = true;
       ++next_seqno_;
+      --payload_size;
     }
-    unacknowledged_messages_.push( msg );
-    sequence_numbers_in_flight_ += msg.sequence_length();
-    impossible_ackno = max( impossible_ackno, next_seqno_ + 1 );
-    transmit( msg );
+
+    while ( payload_size > 0 ) {
+      string data( reader().peek() );
+      if ( data.empty() || data == "\377" ) {
+        break; // 没有更多数据可读
+      }
+      msg.payload += data.substr( 0, payload_size );
+      auto mn = min( payload_size, data.size() );
+      payload_size -= mn;
+      writer().reader().pop( mn );
+      next_seqno_ += mn;
+    }
+    if ( writer().is_closed() ) {
+      is_closed_ = true;
+    }
+    if ( ( ( ( window_size_ > sequence_numbers_in_flight_ + msg.sequence_length() ) && !reader().bytes_buffered() )
+           || payload_size )
+         && is_closed_ && !FIN_sent ) {
+      FIN_sent = true;
+      msg.FIN = true;
+      ++next_seqno_;
+    }
+    msg.RST = reader().has_error();
+    if ( msg.sequence_length() > 0 ) {
+      unacknowledged_messages_.push( msg );
+      sequence_numbers_in_flight_ += msg.sequence_length();
+      impossible_ackno = max( impossible_ackno, next_seqno_ + 1 );
+      transmit( msg );
+    }
+    // window_size_ -= msg.sequence_length();
+    if ( msg.sequence_length() == 0 )
+      break;
   }
 }
 
@@ -54,6 +73,10 @@ TCPSenderMessage TCPSender::make_empty_message() const
 
 void TCPSender::receive( const TCPReceiverMessage& msg )
 {
+  if ( msg.RST ) {
+    writer().set_error();
+    return;
+  }
   window_size_ = msg.window_size;
   if ( !msg.ackno.has_value() )
     return;
@@ -69,6 +92,8 @@ void TCPSender::receive( const TCPReceiverMessage& msg )
       curr_RTO_ms_ = initial_RTO_ms_;   // 重置当前重传超时
       consecutive_retransmissions_ = 0; // 重置连续重传计数器
       sequence_numbers_in_flight_ -= message.sequence_length();
+      if ( message.SYN )
+        established = true; // 如果是SYN包，连接已建立
       unacknowledged_messages_.pop();
       poped_ = true;
     } else
@@ -93,10 +118,9 @@ void TCPSender::tick( uint64_t ms_since_last_tick, const TransmitFunction& trans
       return; // 没有未确认的消息，不需要重传
     }
     transmit( unacknowledged_messages_.front() );
-    // if ( window_size_ > 0 ) {
     ++consecutive_retransmissions_;
-    curr_RTO_ms_ *= 2;
-    // }
+    if ( auto& msg = unacknowledged_messages_.front(); msg.SYN || ( established && window_size_ ) )
+      curr_RTO_ms_ *= 2;
     last_tick_ms_ = 0; // 重置重传计时器
   }
 }

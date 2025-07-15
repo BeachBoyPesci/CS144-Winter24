@@ -67,7 +67,8 @@ private:
   uint64_t sequence_numbers_in_flight_ { 0 };  // Number of sequence numbers currently in flight
   std::queue<TCPSenderMessage> unacknowledged_messages_ {}; // Messages that have been sent but not acknowledged
   bool first_ack { false };
-  bool is_closed_ { false }; // Whether the sender has been closed (no more data will be sent)
-  bool FIN_sent { false };   // Whether a FIN has been sent
+  bool is_closed_ { false };  // Whether the sender has been closed (no more data will be sent)
+  bool FIN_sent { false };    // Whether a FIN has been sent
+  bool established { false }; // Whether the connection has been established (SYN sent)
   // bool tick_on_ { false };
 };
