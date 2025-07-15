@@ -26,7 +26,6 @@ void TCPSender::push( const TransmitFunction& transmit )
       ++next_seqno_;
       --curr_size;
     }
-
     while ( curr_size > 0 ) {
       string data( reader().peek() );
       if ( data.empty() || data == "\377" ) {
@@ -42,7 +41,7 @@ void TCPSender::push( const TransmitFunction& transmit )
       is_closed_ = true;
     }
     if ( ( ( ( window_size_ > sequence_numbers_in_flight_ + msg.sequence_length() ) && !reader().bytes_buffered() )
-           || curr_size )
+           || curr_size ) // 窗口尚未排满但是已经读完所有信息，或者窗口为0但假装为1的时候
          && is_closed_ && !FIN_sent ) {
       FIN_sent = true;
       msg.FIN = true;
@@ -72,7 +71,7 @@ TCPSenderMessage TCPSender::make_empty_message() const
 
 void TCPSender::receive( const TCPReceiverMessage& msg )
 {
-  if ( msg.RST ) {
+  if ( msg.RST ) { // 连接出错
     writer().set_error();
     return;
   }
@@ -80,16 +79,16 @@ void TCPSender::receive( const TCPReceiverMessage& msg )
   if ( !msg.ackno.has_value() )
     return;
   auto ack_no_ = ( msg.ackno.value() ).unwrap( isn_, next_seqno_ );
-  if ( ack_no_ >= impossible_ackno ) {
+  if ( ack_no_ >= impossible_ackno ) { // 错误的确认号
     return;
   }
-  bool poped_ = false;
+  bool poped_ = false; // 记录是否pop过message
   while ( !unacknowledged_messages_.empty() ) {
     auto& message = unacknowledged_messages_.front();
     auto first_unacked_seqno_ = message.seqno.unwrap( isn_, next_seqno_ );
     if ( first_unacked_seqno_ + message.sequence_length() <= ack_no_ ) {
-      curr_RTO_ms_ = initial_RTO_ms_;   // 重置当前重传超时
-      consecutive_retransmissions_ = 0; // 重置连续重传计数器
+      curr_RTO_ms_ = initial_RTO_ms_;   // 重置当前超时重传时间
+      consecutive_retransmissions_ = 0; // 重置超时重传计数器
       sequence_numbers_in_flight_ -= message.sequence_length();
       if ( message.SYN )
         established = true; // 如果是SYN包，连接已建立
@@ -118,7 +117,8 @@ void TCPSender::tick( uint64_t ms_since_last_tick, const TransmitFunction& trans
     }
     transmit( unacknowledged_messages_.front() );
     ++consecutive_retransmissions_;
-    if ( auto& msg = unacknowledged_messages_.front(); msg.SYN || ( established && window_size_ ) )
+    if ( auto& msg = unacknowledged_messages_.front();
+         msg.SYN || ( established && window_size_ ) ) // 当窗口为0，假装是1的时候，超时重传时延不会倍增
       curr_RTO_ms_ *= 2;
     last_tick_ms_ = 0; // 重置重传计时器
   }

@@ -66,8 +66,8 @@ private:
   uint64_t consecutive_retransmissions_ { 0 };              // 超时重传次数
   uint64_t sequence_numbers_in_flight_ { 0 };               // 未确认的字节总数
   std::queue<TCPSenderMessage> unacknowledged_messages_ {}; // 未确认的字节序列
-  bool first_ack { false };                                 // SYN已发送，用于保证全局只会push一次SYN信号
-  bool is_closed_ { false };                                // 连接将要关闭
+  bool first_ack { false };                                 // SYN信号已发送，用于保证全局只会push一次SYN信号
+  bool is_closed_ { false };                                // 连接将要关闭，但尚未发送FIN
   bool FIN_sent { false };                                  // FIN信号已发送，用于保证只会push一次FIN信号
   bool established { false };                               // 已建立连接
 };
