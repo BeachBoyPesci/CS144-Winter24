@@ -1,12 +1,9 @@
 #pragma once
 
-#include <map>
-#include <optional>
 #include <queue>
 
 #include "address.hh"
 #include "ethernet_frame.hh"
-#include "ethernet_header.hh"
 #include "ipv4_datagram.hh"
 
 // A "network interface" that connects IP (the internet layer, or network layer)
@@ -87,12 +84,4 @@ private:
 
   // Datagrams that have been received
   std::queue<InternetDatagram> datagrams_received_ {};
-
-  // ARP boardcast request sent but not responsed (don't send it until ARP_RETX_PERIOD)
-  // boardcast_waiting_[ip_addr] = (datagram_payload(which is waiting to be resend), timer)
-  std::map<uint32_t, std::pair<std::vector<InternetDatagram>, size_t>> boardcast_waitlist_ {};
-
-  // the arp table that store in router or host.
-  // arp_map_[ip_addr] = (eth_addr, timer)
-  std::map<uint32_t, std::pair<EthernetAddress, size_t>> arp_map_ {};
 };
