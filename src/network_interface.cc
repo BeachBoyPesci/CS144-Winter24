@@ -39,23 +39,6 @@ void NetworkInterface::send_datagram( const InternetDatagram& dgram, const Addre
   // 如果目标以太网地址已知，立即发送。创建一个以太网帧（类型为EthernetHeader::TYPE_IPv4），将有效载荷设置为序列化的数据报，并设置源地址和目标地址。
   // 如果目标以太网地址未知，广播一个ARP请求以获取下一跳的以太网地址，并将IP数据报排队，以便在收到ARP回复后发送。
   // 例外：你不想用ARP请求淹没网络。如果网络接口在过去5秒内已发送过相同IP地址的ARP请求，不要发送第二个请求——只需等待第一个请求的回复。同样，将数据报排队直到你获取目标以太网地址。
-  const uint32_t next_hop_ipv4 = next_hop.ipv4_numeric();
-  if ( auto it = arp_map_.find( next_hop_ipv4 ); it == arp_map_.end() ) {
-    if ( wait_list_.contains( next_hop_ipv4 ) )
-      return;
-    ARPMessage arp_req { .opcode = ARPMessage::OPCODE_REQUEST,
-                         .sender_ethernet_address = ethernet_address_,
-                         .sender_ip_address = ip_address_.ipv4_numeric(),
-                         .target_ethernet_address = ETHERNET_REQUEST_ADDRESS,
-                         .target_ip_address = next_hop_ipv4 };
-    EthernetHeader header { .dst = ETHERNET_BROADCAST, .src = ethernet_address_, .type = EthernetHeader::TYPE_ARP };
-    transmit( { .header = header, .payload = serialize( arp_req ) } );
-    wait_list_[next_hop_ipv4].first.emplace_back( dgram );
-  } else {
-    EthernetHeader header
-      = { .dst = it->second.first, .src = ethernet_address_, .type = EthernetHeader::TYPE_IPv4 };
-    transmit( { .header = header, .payload = serialize( dgram ) } );
-  }
 }
 
 // 这个方法需要过滤掉目的以太网地址既不是广播地址（ETHERNET_BROADCAST）、也不是本接口的以太网地址（ehternet_address_）的数据帧。
@@ -71,69 +54,21 @@ void NetworkInterface::recv_frame( const EthernetFrame& frame )
 {
   (void)frame;
   // 当以太网帧从网络到达时调用此方法。代码应忽略任何非目标地址的帧（即以太网目标地址不是广播地址或接口自身的以太网地址，存储在_ethernet_address成员变量中）。
-  const EthernetHeader header = frame.header;
-  if ( header.dst != ETHERNET_BROADCAST && header.dst != ethernet_address_ )
-    return;
+
   // 如果传入的帧是IPv4，将有效载荷解析为InternetDatagram，如果成功（parse()方法返回ParseResult::NoError），将结果数据报推送到datagrams_received_queue。
-  if ( header.type == EthernetHeader::TYPE_IPv4 ) {
-    InternetDatagram ip_gram;
-    if ( parse( ip_gram, frame.payload ) ) {
-      datagrams_received_.push( ip_gram );
-    }
-  }
+
   // 如果传入的帧是ARP，将有效载荷解析为ARPMessage
-  else if ( header.type == EthernetHeader::TYPE_ARP ) {
-    ARPMessage arp_msg;
-    if ( parse( arp_msg, frame.payload ) ) {
-      // 学习新的地址映射关系
-      const auto sender_ip = arp_msg.sender_ip_address;
-      const auto sender_ethernet = arp_msg.sender_ethernet_address;
-      arp_map_[sender_ip] = { sender_ethernet, 0 };
-      // 如果是询问我们IP地址的ARP请求，发送一个适当的ARP回复。
-      if ( arp_msg.opcode == ARPMessage::OPCODE_REQUEST
-           && arp_msg.target_ip_address == ip_address_.ipv4_numeric() ) {
-        ARPMessage arp_reply { .opcode = ARPMessage::OPCODE_REPLY,
-                               .sender_ethernet_address = ethernet_address_,
-                               .sender_ip_address = ip_address_.ipv4_numeric(),
-                               .target_ethernet_address = sender_ethernet,
-                               .target_ip_address = sender_ip };
-        EthernetHeader arp_header {
-          .dst = sender_ethernet, .src = ethernet_address_, .type = EthernetHeader::TYPE_ARP };
-        transmit( { .header = arp_header, .payload = serialize( arp_reply ) } );
-      } else {
-        if ( wait_list_.contains( sender_ip ) ) {
-          for ( auto dgram : wait_list_[sender_ip].first ) {
-            EthernetHeader dgram_header
-              = { .dst = sender_ethernet, .src = ethernet_address_, .type = EthernetHeader::TYPE_IPv4 };
-            transmit( { .header = dgram_header, .payload = serialize( dgram ) } );
-          }
-          wait_list_.erase( sender_ip );
-        }
-      }
-    }
-  }
+
+  // 学习新的地址映射关系
+
+  // 如果是询问我们IP地址的ARP请求，发送一个适当的ARP回复。
 }
 
 //! \param[in] ms_since_last_tick the number of milliseconds since the last call to this method
 void NetworkInterface::tick( const size_t ms_since_last_tick )
 {
   (void)ms_since_last_tick;
-  for ( auto it = arp_map_.begin(); it != arp_map_.end(); ) {
-    it->second.second += ms_since_last_tick;
-    if ( it->second.second >= ARP_MAP_TTL ) {
-      it = arp_map_.erase( it );
-    } else {
-      it = next( it );
-    }
-  }
-  for ( auto it = wait_list_.begin(); it != wait_list_.end(); ) {
-    it->second.second += ms_since_last_tick;
-    if ( it->second.second >= ARP_RETX_PERIOD ) {
-      it = wait_list_.erase( it );
-    } else {
-      it = next( it );
-    }
-  }
+
   // 随着时间流逝调用此方法。使任何已过期的IP到以太网映射失效。
 }
 
